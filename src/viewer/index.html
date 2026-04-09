@@ -765,7 +765,7 @@
     </div>
     <div class="header-right">
       <span class="dateline" id="dateline"></span>
-      <button id="theme-toggle" class="btn" style="font-size:9px;padding:3px 10px;letter-spacing:0.1em;margin-right:8px;" onclick="toggleTheme()">DARK</button>
+      <button id="theme-toggle" class="btn" style="font-size:9px;padding:3px 10px;letter-spacing:0.1em;margin-right:8px;" data-action="toggle-theme">DARK</button>
       <span id="ws-status" class="ws-status disconnected">live updates off</span>
     </div>
   </div>
@@ -2883,6 +2883,10 @@
       var action = target.getAttribute('data-action');
       if (!action) return;
 
+      if (action === 'toggle-theme') {
+        toggleTheme();
+        return;
+      }
       if (action === 'refresh-dashboard') {
         refreshDashboard();
         return;
