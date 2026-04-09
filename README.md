@@ -42,10 +42,10 @@ You explain the same architecture every session. You re-discover the same bugs. 
 | **92% fewer tokens** | ~1,900 injected vs ~19,000 full context ($10/yr vs $500+/yr) |
 | **43 MCP tools** | Search, remember, forget, actions, leases, signals, mesh sync |
 | **12 hooks** | Captures every tool use automatically, zero manual effort |
-| **0 external deps** | No Postgres, no Redis, no vector DB. Just iii-engine (auto-installed) |
+| **0 external deps** | No Postgres, no Redis, no vector DB. Just iii-engine |
 
 ```bash
-npx @agentmemory/agentmemory   # installs iii-engine if missing, starts everything
+npx @agentmemory/agentmemory   # starts with local iii-engine or Docker
 ```
 
 ---
@@ -58,7 +58,7 @@ npx @agentmemory/agentmemory   # installs iii-engine if missing, starts everythi
 Install agentmemory: run `npx @agentmemory/agentmemory` in a separate terminal to start the memory server. Then run `/plugin marketplace add rohitg00/agentmemory` and `/plugin install agentmemory` to register all 12 hooks, 4 skills, and 43 MCP tools. Verify with `curl http://localhost:3111/agentmemory/health`. The real-time viewer is at http://localhost:3113.
 ```
 
-That's it. Paste the block above into Claude Code. The agent handles installation, engine startup, plugin registration, and verification.
+That's it. Paste the block above into Claude Code. The agent handles startup, plugin registration, and verification.
 
 ### Other agents
 
@@ -264,6 +264,10 @@ GET  /agentmemory/profile       # Get project intelligence
 git clone https://github.com/rohitg00/agentmemory.git && cd agentmemory
 npm install && npm run build && npm start
 ```
+
+This starts agentmemory with a local `iii-engine` if `iii` is already installed, or falls back to Docker Compose if Docker is available. REST, streams, and the viewer bind to `127.0.0.1` by default.
+
+Install `iii-engine` manually with `cargo install iii-engine` or follow [iii.dev docs](https://iii.dev/docs).
 
 ## First Steps After Install
 
@@ -617,7 +621,7 @@ agentmemory includes a real-time web dashboard that auto-starts on port `3113` (
 - Knowledge graph visualization
 - Health and metrics dashboard
 
-Access at `http://localhost:3113` or via `GET /agentmemory/viewer` on the API port. Protected by `AGENTMEMORY_SECRET` when set. CSP headers applied to all HTML responses.
+Access the local viewer at `http://localhost:3113` or fetch the HTML shell via `GET /agentmemory/viewer` on the API port. The viewer server binds to `127.0.0.1`; the REST-served `/agentmemory/viewer` endpoint follows the normal `AGENTMEMORY_SECRET` bearer-token rules. CSP headers use a per-response script nonce and disable inline handler attributes.
 
 ## Configuration
 
@@ -695,6 +699,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 # Obsidian Export (v0.7.0)
 # OBSIDIAN_AUTO_EXPORT=false
+# AGENTMEMORY_EXPORT_ROOT=~/.agentmemory
 
 # MCP Tool Visibility (v0.7.0) — "core" (7 tools) or "all" (43 tools)
 # AGENTMEMORY_TOOLS=core
@@ -712,7 +717,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 ## API
 
-109 endpoints on port `3111` (103 core + 6 MCP protocol). Protected endpoints require `Authorization: Bearer <secret>` when `AGENTMEMORY_SECRET` is set. The table below shows a representative subset; see `src/triggers/api.ts` for the full endpoint list.
+109 endpoints on port `3111` (103 core + 6 MCP protocol). By default the REST API binds to `127.0.0.1`. Protected endpoints require `Authorization: Bearer <secret>` when `AGENTMEMORY_SECRET` is set, and mesh sync endpoints require `AGENTMEMORY_SECRET` on both peers. The table below shows a representative subset; see `src/triggers/api.ts` for the full endpoint list.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -743,7 +748,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 | `GET` | `/agentmemory/export` | Export all data as JSON |
 | `GET` | `/agentmemory/sessions` | List all sessions |
 | `GET` | `/agentmemory/observations` | Session observations (`?sessionId=X`) |
-| `GET` | `/agentmemory/viewer` | Real-time web viewer (also at `http://localhost:3113`) |
+| `GET` | `/agentmemory/viewer` | Real-time web viewer HTML (local viewer also at `http://localhost:3113`) |
 | `GET` | `/agentmemory/claude-bridge/read` | Read Claude Code native MEMORY.md |
 | `POST` | `/agentmemory/claude-bridge/sync` | Sync memories to MEMORY.md |
 | `POST` | `/agentmemory/graph/query` | Query knowledge graph (BFS traversal) |
@@ -763,7 +768,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 | `GET` | `/agentmemory/lessons` | List lessons (`?project=X&minConfidence=0.5`) |
 | `POST` | `/agentmemory/lessons/search` | Search lessons by query |
 | `POST` | `/agentmemory/lessons/strengthen` | Reinforce a lesson's confidence |
-| `POST` | `/agentmemory/obsidian/export` | Export vault as Obsidian Markdown |
+| `POST` | `/agentmemory/obsidian/export` | Export vault as Obsidian Markdown under `AGENTMEMORY_EXPORT_ROOT` |
 | `GET` | `/agentmemory/mcp/tools` | List MCP tools |
 | `POST` | `/agentmemory/mcp/call` | Execute MCP tool |
 | `GET` | `/agentmemory/mcp/resources` | List MCP resources |
@@ -830,7 +835,7 @@ agentmemory is built on iii-engine's three primitives:
 | **Routines** | `routine-create`, `routine-freeze`, `routine-list`, `routine-run`, `routine-status` | Frozen workflow templates instantiated into action chains |
 | **Signals** | `signal-send`, `signal-read`, `signal-threads`, `signal-cleanup` | Threaded inter-agent messaging with read receipts |
 | **Checkpoints** | `checkpoint-create`, `checkpoint-resolve`, `checkpoint-list`, `checkpoint-expire` | External condition gates (CI, approval, deploy) |
-| **Mesh** | `mesh-register`, `mesh-sync`, `mesh-receive`, `mesh-list`, `mesh-remove` | P2P sync between agentmemory instances |
+| **Mesh** | `mesh-register`, `mesh-sync`, `mesh-receive`, `mesh-list`, `mesh-remove` | P2P sync between agentmemory instances (requires `AGENTMEMORY_SECRET`) |
 | **Sentinels** | `sentinel-create`, `sentinel-trigger`, `sentinel-check`, `sentinel-cancel`, `sentinel-list`, `sentinel-expire` | Event-driven condition watchers |
 | **Sketches** | `sketch-create`, `sketch-add`, `sketch-promote`, `sketch-discard`, `sketch-list`, `sketch-gc` | Ephemeral action graphs with auto-expiry |
 | **Crystals** | `crystallize`, `auto-crystallize`, `crystal-list`, `crystal-get` | LLM-powered compaction of action chains into digests |
@@ -895,7 +900,7 @@ npm run test:integration  # API tests (requires running services)
 ### Prerequisites
 
 - Node.js >= 20
-- [iii-engine](https://iii.dev/docs) (`curl -fsSL https://install.iii.dev/iii/main/install.sh | sh`)
+- [iii-engine](https://iii.dev/docs) or Docker
 
 ## License
 
